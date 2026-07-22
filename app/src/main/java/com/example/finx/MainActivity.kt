@@ -34,9 +34,7 @@ import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.ui.NavDisplay
 import com.example.finx.ui.navigation.Route
-import com.example.finx.ui.screens.ComparisonScreen
-import com.example.finx.ui.screens.DashboardScreen
-import com.example.finx.ui.screens.InsightsScreen
+import com.example.finx.ui.screens.*
 import com.example.finx.ui.theme.*
 
 class MainActivity : ComponentActivity() {
@@ -57,9 +55,13 @@ fun MainApp() {
     val backStack = rememberNavBackStack(Route.Dashboard)
     
     val myEntryProvider = entryProvider<NavKey> {
-        entry<Route.Dashboard> { DashboardScreen() }
+        entry<Route.Dashboard> { DashboardScreen(onNavigateToStock = { backStack.add(Route.StockDetails(it)) }) }
         entry<Route.Comparison> { ComparisonScreen() }
         entry<Route.Insights> { InsightsScreen() }
+        entry<Route.StockDetails> { 
+            val r = it as Route.StockDetails
+            StockDetailsScreen(symbol = r.symbol, onBack = { backStack.removeAt(backStack.size - 1) }) 
+        }
     }
 
     Scaffold(
@@ -69,9 +71,9 @@ fun MainApp() {
                 title = { 
                     Text(
                         "FinX",
-                        style = MaterialTheme.typography.headlineMedium,
+                        style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.ExtraBold,
-                        letterSpacing = (-1.0).sp,
+                        letterSpacing = 0.sp,
                         color = MaterialTheme.colorScheme.onSurface
                     ) 
                 },
@@ -150,11 +152,11 @@ fun FinXModernNavigationBar(
         modifier = Modifier
             .fillMaxWidth()
             .navigationBarsPadding()
-            .padding(horizontal = 24.dp, vertical = 16.dp)
-            .height(72.dp)
-            .clip(RoundedCornerShape(24.dp))
-            .background(GlassWhite)
-            .border(1.dp, GlassBorder, RoundedCornerShape(24.dp)),
+            .padding(horizontal = 34.dp, vertical = 14.dp)
+            .height(64.dp)
+            .clip(RoundedCornerShape(28.dp))
+            .background(Color(0xFF202127).copy(alpha = 0.92f))
+            .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(28.dp)),
         contentAlignment = Alignment.Center
     ) {
         Row(
@@ -190,7 +192,7 @@ fun FinXModernNavigationBar(
                     Icon(
                         item.icon,
                         contentDescription = item.label,
-                        modifier = Modifier.size(28.dp),
+                        modifier = Modifier.size(25.dp),
                         tint = if (isSelected) MaterialTheme.colorScheme.primary else TextSecondary
                     )
                     AnimatedVisibility(visible = isSelected) {

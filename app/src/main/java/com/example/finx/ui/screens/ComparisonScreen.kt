@@ -274,20 +274,36 @@ fun ComparisonAiPremiumPanel(
                 Spacer(modifier = Modifier.height(12.dp))
                 Text("Computing comparative intelligence...", style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
             } else if (result != null) {
-                Text(
-                    result.outlook,
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = PrimaryIndigo
-                )
+                Surface(
+                    color = PrimaryIndigo.copy(alpha = 0.1f),
+                    shape = RoundedCornerShape(22.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, PrimaryIndigo.copy(alpha = 0.22f))
+                ) {
+                    Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("Should I invest?", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.ExtraBold, color = PrimaryIndigo)
+                        Text(
+                            result.suggestedActions.firstOrNull()
+                                ?: result.executiveSummary,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = TextPrimary,
+                            lineHeight = 23.sp
+                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(result.outlook, style = MaterialTheme.typography.labelLarge, color = moodColor(result.outlook), fontWeight = FontWeight.ExtraBold)
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text("${result.confidenceScore}% confidence", style = MaterialTheme.typography.labelMedium, color = TextSecondary, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
                 
                 Spacer(modifier = Modifier.height(20.dp))
                 
-                ComparisonDeepRow("Executive Summary", result.executiveSummary)
-                ComparisonDeepRow("Technical Signals", result.technicalSignals)
-                ComparisonDeepRow("Fundamental Signals", result.fundamentalSignals)
-                result.bullishFactors.take(2).forEach { ComparisonDeepRow("Bullish Factor", it) }
-                result.bearishFactors.take(2).forEach { ComparisonDeepRow("Bearish Factor", it) }
+                ComparisonDeepRow("Current Situation", result.executiveSummary)
+                ComparisonDeepRow("Technical Outlook", result.technicalSignals.ifBlank { "No decisive technical edge yet." })
+                ComparisonDeepRow("Fundamental Read", result.fundamentalSignals.ifBlank { "Fundamental context is being inferred from available market data." })
+                result.bullishFactors.take(3).forEach { ComparisonDeepRow("Why It Could Work", it) }
+                result.bearishFactors.take(3).forEach { ComparisonDeepRow("What Could Go Wrong", it) }
                 
                 Spacer(modifier = Modifier.height(24.dp))
                 
@@ -298,15 +314,9 @@ fun ComparisonAiPremiumPanel(
                     border = androidx.compose.foundation.BorderStroke(1.dp, GlassBorder)
                 ) {
                     Column(modifier = Modifier.padding(20.dp)) {
-                        Text("FINAL VERDICT", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.ExtraBold, color = PrimaryIndigo)
+                        Text("GENERATED FROM", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.ExtraBold, color = PrimaryIndigo)
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            result.suggestedActions.firstOrNull()
-                                ?: result.personalizedNote.ifBlank { result.executiveSummary },
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = TextPrimary
-                        )
+                        Text("Technical indicators, fundamental signals, market sentiment, analyst consensus, recent news, and multi-model AI validation.", style = MaterialTheme.typography.bodySmall, color = TextPrimary, lineHeight = 19.sp, fontWeight = FontWeight.Bold)
                         Spacer(modifier = Modifier.height(12.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Rounded.Info, contentDescription = null, modifier = Modifier.size(14.dp), tint = TextSecondary)

@@ -2,14 +2,19 @@ package com.example.finx.ui.screens
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.automirrored.rounded.TrendingUp
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
@@ -38,7 +43,9 @@ import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DashboardScreen() {
+fun DashboardScreen(
+    onNavigateToStock: (String) -> Unit = {}
+) {
     val repository        = NetworkModule.marketRepository
     val orchestrator      = NetworkModule.aiOrchestrator
     val dailyBriefEngine  = NetworkModule.dailyBriefEngine
@@ -91,8 +98,8 @@ fun DashboardScreen() {
         }
     }
 
-    val loadMarketInsights = {
-        if (NetworkModule.dashboardInsights.isEmpty()) {
+    val loadMarketInsights = { force: Boolean ->
+        if (force || NetworkModule.dashboardInsights.isEmpty()) {
             NetworkModule.isInsightsLoading = true
             coroutineScope.launch {
                 val newInsights = NetworkModule.dashboardIntelligenceEngine.getInsights(watchlistSymbols.toList())
@@ -107,7 +114,7 @@ fun DashboardScreen() {
         userProfile = userMemoryStore.loadProfile()
         fetchWatchlist()
         loadDailyBrief()
-        loadMarketInsights()
+        loadMarketInsights(false)
 
         // First-time installation notification
         if (!userProfile.hasSeenWelcome) {
@@ -128,6 +135,13 @@ fun DashboardScreen() {
     LaunchedEffect(watchlistQuotes) {
         if (watchlistQuotes.isNotEmpty() && watchlistAiResult == null) {
             analyzeWatchlist()
+        }
+    }
+
+    // Refresh insights when watchlist changes significantly
+    LaunchedEffect(watchlistSymbols.size) {
+        if (watchlistSymbols.isNotEmpty()) {
+            loadMarketInsights(true)
         }
     }
 
@@ -158,10 +172,20 @@ fun DashboardScreen() {
             ) {
                 item {
                     GreetingSection(
+                        userProfile = userProfile,
                         onProfileClick = { showProfileSheet = true }
                     )
                 }
-                // ... rest of the items remain the same
+
+            item {
+                AnalystMorningBriefHero(
+                    profile = userProfile,
+                    brief = dailyBrief,
+                    aiResult = watchlistAiResult,
+                    isLoading = isLoadingBrief || isAnalyzingWatchlist,
+                    onRefresh = { loadDailyBrief(); analyzeWatchlist() }
+                )
+            }
 
             item {
                 StockLookupField(
@@ -171,6 +195,7 @@ fun DashboardScreen() {
                         if (!watchlistSymbols.contains(result.symbol)) watchlistSymbols.add(result.symbol)
                         coroutineScope.launch { userMemoryStore.recordSymbolView(result.symbol) }
                         fetchWatchlist()
+                        onNavigateToStock(result.symbol)
                     },
                     label = "Search company or ticker"
                 )
@@ -210,7 +235,11 @@ fun DashboardScreen() {
             } else {
                 items(watchlistSymbols.toList()) { sym ->
                     val quote = watchlistQuotes[sym]
-                    if (quote != null) WatchlistCardPremium(symbol = sym, quote = quote)
+                    if (quote != null) {
+                        Surface(onClick = { onNavigateToStock(sym) }, color = Color.Transparent) {
+                            WatchlistCardPremium(symbol = sym, quote = quote)
+                        }
+                    }
                 }
             }
         }
@@ -229,7 +258,7 @@ fun DashboardScreen() {
             }
         )
     }
-}
+    }
 }
 
 @Composable
@@ -266,28 +295,315 @@ fun MeshGradientBackground() {
 }
 
 @Composable
-fun GreetingSection(onProfileClick: () -> Unit = {}) {
+fun GreetingSection(userProfile: UserProfile, onProfileClick: () -> Unit = {}) {
     val calendar = Calendar.getInstance()
     val hour = calendar.get(Calendar.HOUR_OF_DAY)
     val greeting = when (hour) { in 0..11 -> "Good Morning"; in 12..16 -> "Good Afternoon"; else -> "Good Evening" }
 
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column {
-            Text(text = greeting, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = TextSecondary)
-            Text(text = "Your Financial Intel", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.ExtraBold, color = TextPrimary, letterSpacing = (-1).sp)
+    // Pulsing animation for the nudge
+    val infiniteTransition = rememberInfiniteTransition(label = "NudgePulse")
+    val pulseAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.6f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2000, easing = EaseInOutSine),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "PulseAlpha"
+    )
+
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
+        if (!userProfile.isComplete) {
+            Surface(
+                onClick = onProfileClick,
+                modifier = Modifier
+                    .padding(bottom = 12.dp)
+                    .graphicsLayer(alpha = pulseAlpha),
+                color = PrimaryIndigo.copy(alpha = 0.1f),
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, PrimaryIndigo.copy(alpha = 0.2f))
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                ) {
+                    Icon(
+                        Icons.Rounded.AutoAwesome,
+                        contentDescription = null,
+                        tint = PrimaryIndigo,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        "Set up your professional profile to unlock AI alpha",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = TextPrimary,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.weight(1f))
+                    Icon(
+                        Icons.Rounded.ChevronRight,
+                        contentDescription = null,
+                        tint = TextSecondary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
         }
-        IconButton(
-            onClick = onProfileClick,
-            modifier = Modifier.clip(CircleShape).background(GlassWhite)
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(Icons.Rounded.Person, contentDescription = "User Profile", tint = PrimaryIndigo)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = greeting, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = TextSecondary)
+                Text(
+                    text = if (userProfile.fullName.isNotBlank()) userProfile.fullName.split(" ").first() else "Market Intelligence",
+                    style = MaterialTheme.typography.headlineLarge,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = TextPrimary,
+                    letterSpacing = (-1).sp
+                )
+            }
+
+            IconButton(
+                onClick = onProfileClick,
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(GlassWhite.copy(alpha = 0.7f))
+            ) {
+                Icon(Icons.Rounded.Person, contentDescription = "User Profile", tint = PrimaryIndigo, modifier = Modifier.size(23.dp))
+            }
         }
     }
 }
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun AnalystMorningBriefHero(
+    profile: UserProfile,
+    brief: DailyBrief?,
+    aiResult: OrchestratedAiResult?,
+    isLoading: Boolean,
+    onRefresh: () -> Unit
+) {
+    val firstName = profile.fullName
+        .split(" ")
+        .firstOrNull()
+        ?.takeIf { it.isNotBlank() }
+        ?: "Arnav"
+    val mood = brief?.marketMood ?: aiResult?.outlook ?: "Neutral"
+    val confidence = aiResult?.confidenceScore ?: if (brief != null) 74 else 0
+    val evidence = buildList {
+        brief?.topWinners?.firstOrNull()?.let { add("${it.symbol} ${formatSignedPercent(it.percentChange)}") }
+        brief?.sectorRotation?.takeIf { it.isNotBlank() }?.let { add(it) }
+        aiResult?.technicalSignals?.takeIf { it.isNotBlank() }?.let { add("Technicals: $it") }
+        aiResult?.fundamentalSignals?.takeIf { it.isNotBlank() }?.let { add("Fundamentals: $it") }
+        aiResult?.importantNews?.firstOrNull()?.let { add("News: $it") }
+    }.take(5)
+    val opportunities = (aiResult?.opportunities.orEmpty() + brief?.personalRecommendations.orEmpty() + listOfNotNull(brief?.aiOpportunity))
+        .filter { it.isNotBlank() }
+        .distinct()
+        .take(3)
+    val risks = (aiResult?.risks.orEmpty() + brief?.topLosers.orEmpty().map { "${it.symbol} is under pressure at ${formatSignedPercent(it.percentChange)}" })
+        .filter { it.isNotBlank() }
+        .distinct()
+        .take(3)
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .smoothPress(0.99f)
+            .animateContentSize(
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioNoBouncy,
+                    stiffness = Spring.StiffnessMediumLow
+                )
+            ),
+        shape = RoundedCornerShape(30.dp),
+        color = Color(0xFF171922).copy(alpha = 0.94f),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
+    ) {
+        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(RoundedCornerShape(13.dp))
+                        .background(Brush.linearGradient(listOf(PrimaryIndigo, TertiaryViolet))),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Rounded.Psychology, contentDescription = null, tint = Color.White, modifier = Modifier.size(21.dp))
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("AI Morning Brief", style = MaterialTheme.typography.labelLarge, color = TextSecondary, fontWeight = FontWeight.Bold)
+                    Text("Market Brief", style = MaterialTheme.typography.headlineSmall, color = TextPrimary, fontWeight = FontWeight.ExtraBold, letterSpacing = 0.sp)
+                }
+                IconButton(onClick = onRefresh) {
+                    Icon(Icons.Rounded.Refresh, contentDescription = "Refresh brief", tint = PrimaryIndigo)
+                }
+            }
+
+            if (isLoading && brief == null && aiResult == null) {
+                AnalystBriefSkeleton()
+            } else {
+                Text(
+                    text = aiResult?.executiveSummary?.takeIf { it.isNotBlank() }
+                        ?: brief?.marketOverview?.takeIf { it.isNotBlank() }
+                        ?: "FinX is gathering market context, watchlist movement, news, analyst sentiment, and technical signals for your morning read.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextPrimary,
+                    lineHeight = 22.sp,
+                    fontWeight = FontWeight.Medium
+                )
+
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AnalystEvidenceChip("Mood", mood, moodColor(mood))
+                    if (confidence > 0) AnalystEvidenceChip("Confidence", "$confidence%", PrimaryIndigo)
+                }
+
+                if (evidence.isNotEmpty()) {
+                    AnalystBriefSection(
+                        title = "Why This Matters",
+                        icon = Icons.Rounded.FactCheck,
+                        color = PrimaryIndigo,
+                        items = evidence
+                    )
+                }
+
+                AnalystSignalStrip(
+                    opportunities = opportunities.ifEmpty { listOf("Wait for stronger confirmation before adding risk.") },
+                    risks = risks.ifEmpty { listOf("No major watchlist risk detected.") }
+                )
+
+                val action = aiResult?.suggestedActions?.firstOrNull()
+                    ?: brief?.personalRecommendations?.firstOrNull()
+                    ?: "Review your watchlist before adding risk; prioritize names with strong fundamentals and confirmed momentum."
+                Surface(
+                    color = PrimaryIndigo.copy(alpha = 0.1f),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        Text("Final AI Verdict", style = MaterialTheme.typography.labelSmall, color = PrimaryIndigo, fontWeight = FontWeight.ExtraBold)
+                        Text(action, style = MaterialTheme.typography.bodySmall, color = TextPrimary, fontWeight = FontWeight.Bold, lineHeight = 19.sp)
+                        Text(
+                            "Generated from technical indicators, fundamentals, market sentiment, analyst consensus, and recent news.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextSecondary,
+                            lineHeight = 16.sp
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AnalystBriefSkeleton() {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        repeat(4) { index ->
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(if (index == 3) 0.7f else 1f)
+                    .height(if (index == 0) 22.dp else 14.dp)
+                    .clip(CircleShape)
+                    .background(GlassWhite.copy(alpha = 0.18f))
+            )
+        }
+    }
+}
+
+@Composable
+fun AnalystEvidenceChip(label: String, value: String, color: Color) {
+    Surface(
+        color = color.copy(alpha = 0.1f),
+        shape = CircleShape,
+        border = BorderStroke(1.dp, color.copy(alpha = 0.18f))
+    ) {
+        Row(modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(label.uppercase(), style = MaterialTheme.typography.labelSmall, color = TextSecondary, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.width(6.dp))
+            Text(value, style = MaterialTheme.typography.labelSmall, color = color, fontWeight = FontWeight.ExtraBold)
+        }
+    }
+}
+
+@Composable
+fun AnalystBriefSection(title: String, icon: ImageVector, color: Color, items: List<String>) {
+    Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(17.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(title, style = MaterialTheme.typography.labelMedium, color = TextPrimary, fontWeight = FontWeight.ExtraBold)
+        }
+        items.take(2).forEach { item ->
+            Row(verticalAlignment = Alignment.Top) {
+                Box(modifier = Modifier.padding(top = 7.dp).size(5.dp).background(color.copy(alpha = 0.9f), CircleShape))
+                Spacer(Modifier.width(10.dp))
+                Text(item, style = MaterialTheme.typography.bodySmall, color = TextSecondary, lineHeight = 18.sp, fontWeight = FontWeight.Medium)
+            }
+        }
+    }
+}
+
+@Composable
+fun AnalystSignalStrip(opportunities: List<String>, risks: List<String>) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = Color.White.copy(alpha = 0.055f),
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
+    ) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            AnalystSignalLine("Opportunity", opportunities.firstOrNull().orEmpty(), Color(0xFF4ADE80))
+            HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+            AnalystSignalLine("Risk", risks.firstOrNull().orEmpty(), Color(0xFFF87171))
+        }
+    }
+}
+
+@Composable
+fun AnalystSignalLine(title: String, value: String, color: Color) {
+    Row(verticalAlignment = Alignment.Top) {
+        Box(modifier = Modifier.padding(top = 4.dp).size(8.dp).clip(CircleShape).background(color))
+        Spacer(Modifier.width(10.dp))
+        Column {
+            Text(title.uppercase(), style = MaterialTheme.typography.labelSmall, color = color, fontWeight = FontWeight.ExtraBold)
+            Spacer(Modifier.height(2.dp))
+            Text(value, style = MaterialTheme.typography.bodySmall, color = TextPrimary.copy(alpha = 0.9f), lineHeight = 18.sp, fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
+@Composable
+fun AnalystCompactList(modifier: Modifier, title: String, color: Color, items: List<String>) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        color = GlassWhite,
+        shape = RoundedCornerShape(18.dp),
+        border = BorderStroke(1.dp, GlassBorder)
+    ) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(title.uppercase(), style = MaterialTheme.typography.labelSmall, color = color, fontWeight = FontWeight.ExtraBold)
+            items.take(2).forEach {
+                Text(it, style = MaterialTheme.typography.labelSmall, color = TextPrimary, lineHeight = 16.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+fun moodColor(mood: String): Color = when {
+    mood.contains("bull", ignoreCase = true) -> Color(0xFF4ADE80)
+    mood.contains("bear", ignoreCase = true) -> Color(0xFFF87171)
+    else -> Color(0xFFFBBF24)
+}
+
+fun formatSignedPercent(value: Double): String =
+    "${if (value >= 0) "+" else ""}${String.format(Locale.getDefault(), "%.1f", value)}%"
 
 @Composable
 fun MarketInsightsSection(insights: List<DashboardInsight>, isLoading: Boolean) {
@@ -539,35 +855,91 @@ fun OrchestratedDailyBriefCard(
                 // AI Orchestrated analysis
                 aiResult?.let { r ->
                     if (r.executiveSummary.isNotBlank()) {
-                        Surface(color = GlassWhite, shape = RoundedCornerShape(16.dp), border = androidx.compose.foundation.BorderStroke(1.dp, GlassBorder)) {
+                        Surface(color = GlassWhite, shape = RoundedCornerShape(20.dp), border = androidx.compose.foundation.BorderStroke(1.dp, GlassBorder)) {
                             Column(modifier = Modifier.padding(16.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(Icons.Rounded.Psychology, contentDescription = null, tint = PrimaryIndigo, modifier = Modifier.size(16.dp))
                                     Spacer(Modifier.width(6.dp))
-                                    Text(r.modelsLabel.uppercase(), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.ExtraBold, color = PrimaryIndigo)
+                                    Text("INSTITUTIONAL ANALYSIS", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.ExtraBold, color = PrimaryIndigo)
                                     Spacer(Modifier.weight(1f))
-                                    Text("${r.confidenceScore}% confidence", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+                                    Text("${r.confidenceScore}% Confidence", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
                                 }
-                                Spacer(Modifier.height(8.dp))
-                                Text(r.executiveSummary, style = MaterialTheme.typography.bodySmall, color = TextPrimary, lineHeight = 18.sp)
-                                if (r.personalizedNote.isNotBlank()) {
+                                Spacer(Modifier.height(12.dp))
+                                Text(r.executiveSummary, style = MaterialTheme.typography.bodyMedium, color = TextPrimary, lineHeight = 20.sp, fontWeight = FontWeight.Medium)
+                                
+                                if (r.marketDrivers.isNotEmpty()) {
+                                    Spacer(Modifier.height(16.dp))
+                                    Text("KEY DRIVERS", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.ExtraBold, color = TextSecondary)
                                     Spacer(Modifier.height(8.dp))
-                                    Text("💡 ${r.personalizedNote}", style = MaterialTheme.typography.labelSmall, color = PrimaryIndigo)
+                                    r.marketDrivers.take(3).forEach { driver ->
+                                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
+                                            Box(modifier = Modifier.size(4.dp).background(PrimaryIndigo, CircleShape))
+                                            Spacer(Modifier.width(8.dp))
+                                            Text(driver, style = MaterialTheme.typography.bodySmall, color = TextPrimary)
+                                        }
+                                    }
+                                }
+
+                                if (r.investmentOutlook.isNotBlank()) {
+                                    Spacer(Modifier.height(16.dp))
+                                    Surface(color = PrimaryIndigo.copy(alpha = 0.05f), shape = RoundedCornerShape(12.dp)) {
+                                        Column(modifier = Modifier.padding(12.dp)) {
+                                            Text("OUTLOOK", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.ExtraBold, color = PrimaryIndigo)
+                                            Spacer(Modifier.height(4.dp))
+                                            Text(r.investmentOutlook, style = MaterialTheme.typography.bodySmall, color = TextPrimary, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
+                                        }
+                                    }
+                                }
+
+                                if (r.personalizedNote.isNotBlank()) {
+                                    Spacer(Modifier.height(12.dp))
+                                    Text("💡 ${r.personalizedNote}", style = MaterialTheme.typography.labelSmall, color = PrimaryIndigo, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
                     }
-                    // Actions
+
+                    // Sector Winners & Losers
+                    if (r.winningSectors.isNotEmpty() || r.losingSectors.isNotEmpty()) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            if (r.winningSectors.isNotEmpty()) {
+                                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Text("WINNERS", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.ExtraBold, color = Color(0xFF4ADE80))
+                                    r.winningSectors.take(2).forEach { sector ->
+                                        Surface(color = Color(0xFF4ADE80).copy(0.1f), shape = RoundedCornerShape(8.dp)) {
+                                            Text(sector, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall, color = Color(0xFF4ADE80), fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+                            }
+                            if (r.losingSectors.isNotEmpty()) {
+                                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Text("LAGGARDS", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.ExtraBold, color = Color(0xFFF87171))
+                                    r.losingSectors.take(2).forEach { sector ->
+                                        Surface(color = Color(0xFFF87171).copy(0.1f), shape = RoundedCornerShape(8.dp)) {
+                                            Text(sector, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall, color = Color(0xFFF87171), fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Suggested Actions (Professional style)
                     if (r.suggestedActions.isNotEmpty()) {
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            r.suggestedActions.take(2).forEach { action ->
-                                Surface(color = SecondaryTeal.copy(0.1f), shape = RoundedCornerShape(10.dp), border = androidx.compose.foundation.BorderStroke(1.dp, SecondaryTeal.copy(0.2f))) {
-                                    Text(action, modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp), style = MaterialTheme.typography.labelSmall, color = SecondaryTeal, fontWeight = FontWeight.Bold)
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("INVESTMENT ACTIONS", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.ExtraBold, color = TextSecondary)
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                r.suggestedActions.take(3).forEach { action ->
+                                    Surface(color = SecondaryTeal.copy(0.1f), shape = RoundedCornerShape(10.dp), border = androidx.compose.foundation.BorderStroke(1.dp, SecondaryTeal.copy(0.2f))) {
+                                        Text(action, modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp), style = MaterialTheme.typography.labelSmall, color = SecondaryTeal, fontWeight = FontWeight.Bold)
+                                    }
                                 }
                             }
                         }
                     }
-                } ?: run {
+                }
+?: run {
                     if (brief == null) {
                         Text("Add stocks to your watchlist for personalized AI intelligence.", style = MaterialTheme.typography.bodyMedium, color = TextSecondary, lineHeight = 22.sp)
                     }
@@ -932,12 +1304,13 @@ fun UserProfileSheet(
     onDismiss: () -> Unit,
     onSave: (UserProfile) -> Unit
 ) {
+    var fullName by remember { mutableStateOf(profile.fullName) }
+    var ageText by remember { mutableStateOf(if (profile.age > 0) profile.age.toString() else "") }
     var investmentStyle by remember { mutableStateOf(profile.investmentStyle) }
     var riskTolerance by remember { mutableStateOf(profile.riskTolerance) }
     var investmentHorizon by remember { mutableStateOf(profile.investmentHorizon) }
     var country by remember { mutableStateOf(profile.country) }
     var preferredCurrency by remember { mutableStateOf(profile.preferredCurrency) }
-    var ageRange by remember { mutableStateOf(profile.ageRange) }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -947,7 +1320,8 @@ fun UserProfileSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 24.dp, vertical = 12.dp),
+                .padding(horizontal = 24.dp, vertical = 12.dp)
+                .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
             Text("Investor Profile", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold)
@@ -956,6 +1330,26 @@ fun UserProfileSheet(
                 style = MaterialTheme.typography.bodyMedium,
                 color = TextSecondary,
                 lineHeight = 20.sp
+            )
+
+            OutlinedTextField(
+                value = fullName,
+                onValueChange = { fullName = it },
+                label = { Text("Full Name") },
+                placeholder = { Text("e.g. Alex Rivera") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp)
+            )
+
+            OutlinedTextField(
+                value = ageText,
+                onValueChange = { if (it.all { char -> char.isDigit() }) ageText = it },
+                label = { Text("Age") },
+                placeholder = { Text("e.g. 30") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp)
             )
 
             ProfileChoiceRow("Style", listOf("Growth", "Value", "Income", "Balanced"), investmentStyle) { investmentStyle = it }
@@ -968,50 +1362,55 @@ fun UserProfileSheet(
                     onValueChange = { country = it.uppercase(Locale.getDefault()).take(3) },
                     label = { Text("Country") },
                     modifier = Modifier.weight(1f),
-                    singleLine = true
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp)
                 )
                 OutlinedTextField(
                     value = preferredCurrency,
                     onValueChange = { preferredCurrency = it.uppercase(Locale.getDefault()).take(3) },
                     label = { Text("Currency") },
                     modifier = Modifier.weight(1f),
-                    singleLine = true
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp)
                 )
             }
 
-            OutlinedTextField(
-                value = ageRange,
-                onValueChange = { ageRange = it },
-                label = { Text("Age range") },
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
-
-            Button(
-                onClick = {
-                    onSave(
-                        profile.copy(
-                            investmentStyle = investmentStyle,
-                            riskTolerance = riskTolerance,
-                            investmentHorizon = investmentHorizon,
-                            country = country.ifBlank { "US" },
-                            preferredCurrency = preferredCurrency.ifBlank { "USD" },
-                            ageRange = ageRange.ifBlank { profile.ageRange }
-                        )
-                    )
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp),
-                shape = RoundedCornerShape(16.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = PrimaryIndigo, contentColor = Color.White)
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Icon(Icons.Rounded.Save, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Save Profile", fontWeight = FontWeight.Bold)
+                OutlinedButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f).height(52.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, PrimaryIndigo.copy(alpha = 0.5f))
+                ) {
+                    Text("Setup Later", color = TextPrimary)
+                }
+
+                Button(
+                    onClick = {
+                        onSave(
+                            profile.copy(
+                                fullName = fullName,
+                                age = ageText.toIntOrNull() ?: 0,
+                                investmentStyle = investmentStyle,
+                                riskTolerance = riskTolerance,
+                                investmentHorizon = investmentHorizon,
+                                country = country.ifBlank { "US" },
+                                preferredCurrency = preferredCurrency.ifBlank { "USD" }
+                            )
+                        )
+                    },
+                    modifier = Modifier.weight(1f).height(52.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryIndigo, contentColor = Color.White)
+                ) {
+                    Text("Continue", fontWeight = FontWeight.Bold)
+                }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(24.dp))
         }
     }
 }

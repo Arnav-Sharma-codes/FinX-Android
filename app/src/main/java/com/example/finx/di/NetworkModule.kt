@@ -105,7 +105,7 @@ object NetworkModule {
     }
 
     val dashboardIntelligenceEngine: com.example.finx.data.orchestrator.DashboardIntelligenceEngine by lazy {
-        com.example.finx.data.orchestrator.DashboardIntelligenceEngine(groqApiService, marketRepository, userMemoryStore)
+        com.example.finx.data.orchestrator.DashboardIntelligenceEngine(groqApiService, marketRepository, userMemoryStore, unifiedNewsService)
     }
 
     // NewsClusterer is a stateless object — accessed directly via NewsClusterer.cluster(...)

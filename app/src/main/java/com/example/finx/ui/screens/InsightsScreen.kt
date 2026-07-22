@@ -284,6 +284,7 @@ fun PremiumNewsCardModern(news: NewsItem) {
     var aiResult by remember { mutableStateOf<OrchestratedAiResult?>(null) }
     var isAnalyzing by remember { mutableStateOf(false) }
     val cardInteraction = remember { MutableInteractionSource() }
+    val themeTitle = remember(news.headline) { inferNewsTheme(news.headline) }
 
     LaunchedEffect(news.id) {
         if (aiResult == null && !isAnalyzing) {
@@ -340,20 +341,27 @@ fun PremiumNewsCardModern(news: NewsItem) {
             Spacer(modifier = Modifier.height(14.dp))
 
             Text(
-                news.headline,
-                style = MaterialTheme.typography.titleMedium,
+                "MARKET THEME",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.ExtraBold,
+                color = PrimaryIndigo
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                themeTitle,
+                style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
-                lineHeight = 24.sp,
+                lineHeight = 25.sp,
                 color = TextPrimary
             )
 
             if (!isExpanded) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    news.summary,
+                    aiResult?.executiveSummary?.takeIf { it.isNotBlank() } ?: news.summary,
                     style = MaterialTheme.typography.bodySmall,
                     color = TextSecondary,
-                    maxLines = 2,
+                    maxLines = 3,
                     lineHeight = 18.sp
                 )
 
@@ -374,7 +382,15 @@ fun PremiumNewsCardModern(news: NewsItem) {
                 Column {
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
-                        news.summary,
+                        news.headline,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = TextPrimary,
+                        fontWeight = FontWeight.Bold,
+                        lineHeight = 21.sp
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        aiResult?.executiveSummary?.takeIf { it.isNotBlank() } ?: news.summary,
                         style = MaterialTheme.typography.bodyMedium,
                         color = TextSecondary,
                         lineHeight = 22.sp
@@ -498,8 +514,8 @@ fun ModernAiDeepIntelligencePanel(result: OrchestratedAiResult) {
             Spacer(modifier = Modifier.height(20.dp))
 
             ModernIntelligenceRow(label = "Outlook", value = result.outlook, emoji = result.outlookEmoji)
-            ModernIntelligenceRow(label = "Summary", value = result.executiveSummary)
-            ModernIntelligenceRow(label = "Technical Signal", value = result.technicalSignals)
+            ModernIntelligenceRow(label = "Why It Matters", value = result.executiveSummary)
+            ModernIntelligenceRow(label = "Market Impact", value = result.technicalSignals.ifBlank { result.investmentOutlook })
             ModernIntelligenceRow(label = "Investor Action", value = result.suggestedActions.firstOrNull().orEmpty())
             
             if (result.importantNews.isNotEmpty()) {
@@ -507,9 +523,22 @@ fun ModernAiDeepIntelligencePanel(result: OrchestratedAiResult) {
             }
             
             ModernIntelligenceRow(label = "Opportunity", value = result.opportunities.firstOrNull().orEmpty())
-            ModernIntelligenceRow(label = "Risk Level", value = result.riskLevel)
-            ModernIntelligenceRow(label = "Models", value = result.modelsLabel)
+            ModernIntelligenceRow(label = "Risks", value = result.risks.firstOrNull() ?: result.riskLevel)
+            ModernIntelligenceRow(label = "Generated From", value = "${result.modelsLabel} plus live news context")
         }
+    }
+}
+
+fun inferNewsTheme(headline: String): String {
+    val upper = headline.uppercase(Locale.getDefault())
+    val company = listOf("NVIDIA", "MICROSOFT", "APPLE", "TESLA", "GOOGLE", "AMAZON", "META", "BITCOIN", "OIL", "FED", "CPI")
+        .firstOrNull { upper.contains(it) }
+    return when {
+        company != null -> "$company dominates today's market conversation"
+        upper.contains("EARN") -> "Earnings expectations are reshaping sentiment"
+        upper.contains("RATE") || upper.contains("INFLATION") -> "Macro policy risk is driving market positioning"
+        upper.contains("AI") -> "AI infrastructure remains the market's key growth story"
+        else -> "A major market story is developing"
     }
 }
 

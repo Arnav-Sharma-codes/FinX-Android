@@ -13,4 +13,7 @@ sealed interface Route : NavKey {
 
     @Serializable
     data object Insights : Route
+
+    @Serializable
+    data class StockDetails(val symbol: String) : Route
 }
