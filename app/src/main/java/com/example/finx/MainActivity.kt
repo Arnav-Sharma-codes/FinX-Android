@@ -36,6 +36,7 @@ import androidx.navigation3.ui.NavDisplay
 import com.example.finx.ui.navigation.Route
 import com.example.finx.ui.screens.*
 import com.example.finx.ui.theme.*
+import androidx.compose.material.icons.rounded.Person
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -55,9 +56,15 @@ fun MainApp() {
     val backStack = rememberNavBackStack(Route.Dashboard)
     
     val myEntryProvider = entryProvider<NavKey> {
-        entry<Route.Dashboard> { DashboardScreen(onNavigateToStock = { backStack.add(Route.StockDetails(it)) }) }
+        entry<Route.Dashboard> { 
+            DashboardScreen(
+                onNavigateToStock = { backStack.add(Route.StockDetails(it)) },
+                onNavigateToProfile = { backStack.clear(); backStack.add(Route.Profile) }
+            ) 
+        }
         entry<Route.Comparison> { ComparisonScreen() }
         entry<Route.Insights> { InsightsScreen() }
+        entry<Route.Profile> { ProfileScreen() }
         entry<Route.StockDetails> { 
             val r = it as Route.StockDetails
             StockDetailsScreen(symbol = r.symbol, onBack = { backStack.removeAt(backStack.size - 1) }) 
@@ -213,7 +220,8 @@ fun FinXModernNavigationBar(
 private val items = listOf(
     NavigationItem("Dashboard", Route.Dashboard, Icons.Rounded.Dashboard),
     NavigationItem("Comparison", Route.Comparison, Icons.AutoMirrored.Rounded.CompareArrows),
-    NavigationItem("Insights", Route.Insights, Icons.Rounded.Analytics)
+    NavigationItem("Insights", Route.Insights, Icons.Rounded.Analytics),
+    NavigationItem("Profile", Route.Profile, Icons.Rounded.Person)
 )
 
 private data class NavigationItem(
