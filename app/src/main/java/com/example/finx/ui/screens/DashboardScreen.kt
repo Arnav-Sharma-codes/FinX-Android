@@ -1,5 +1,6 @@
 package com.example.finx.ui.screens
 
+import android.speech.tts.TextToSpeech
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
@@ -10,6 +11,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.TrendingUp
+import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -20,6 +22,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -46,6 +49,7 @@ fun DashboardScreen(
     val userMemoryStore   = NetworkModule.userMemoryStore
     val watchlistSymbols  = NetworkModule.watchlistSymbols
     val coroutineScope    = rememberCoroutineScope()
+    val context           = LocalContext.current
 
     var watchlistQuotes    by remember { mutableStateOf<Map<String, QuoteResponse>>(emptyMap()) }
     var isLoadingWatchlist by remember { mutableStateOf(false) }
@@ -60,6 +64,24 @@ fun DashboardScreen(
     var isLoadingInsights by remember { mutableStateOf(false) }
     
     var userProfile        by remember { mutableStateOf(UserProfile()) }
+
+    var tts: TextToSpeech? by remember { mutableStateOf(null) }
+
+    DisposableEffect(Unit) {
+        tts = TextToSpeech(context) { status ->
+            if (status == TextToSpeech.SUCCESS) {
+                tts?.language = Locale.US
+            }
+        }
+        onDispose {
+            tts?.stop()
+            tts?.shutdown()
+        }
+    }
+
+    val speakBrief = { text: String ->
+        tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, null)
+    }
 
     val analyzeWatchlist = { quotes: Map<String, QuoteResponse> ->
         if (quotes.isNotEmpty()) {
@@ -130,16 +152,15 @@ fun DashboardScreen(
                 }
 
                 item {
-                    if (userProfile.enableDailyBrief) {
-                        AnalystMorningBriefHero(
-                            profile = userProfile,
-                            brief = dailyBrief,
-                            aiResult = watchlistAiResult,
-                            isLoading = isLoadingBrief || isAnalyzingWatchlist,
-                            onRefresh = { refreshDashboard(); fetchWatchlist() },
-                            modifier = Modifier.fadeInSlideIn(delay = 100)
-                        )
-                    }
+                    AnalystMorningBriefHero(
+                        profile = userProfile,
+                        brief = dailyBrief,
+                        aiResult = watchlistAiResult,
+                        isLoading = isLoadingBrief || isAnalyzingWatchlist,
+                        onRefresh = { refreshDashboard(); fetchWatchlist() },
+                        onSpeak = { text -> speakBrief(text) },
+                        modifier = Modifier.fadeInSlideIn(delay = 100)
+                    )
                 }
 
                 item {
@@ -167,24 +188,20 @@ fun DashboardScreen(
                 }
 
                 item {
-                    if (userProfile.enableDailyBrief) {
-                        OrchestratedDailyBriefCard(
-                            brief = dailyBrief,
-                            aiResult = watchlistAiResult,
-                            isLoading = isAnalyzingWatchlist,
-                            onRefresh = { fetchWatchlist() },
-                            modifier = Modifier.fadeInSlideIn(delay = 400)
-                        )
-                    }
+                    OrchestratedDailyBriefCard(
+                        brief = dailyBrief,
+                        aiResult = watchlistAiResult,
+                        isLoading = isAnalyzingWatchlist,
+                        onRefresh = { fetchWatchlist() },
+                        modifier = Modifier.fadeInSlideIn(delay = 400)
+                    )
                 }
 
                 item {
-                    if (userProfile.enablePersonalizedRecs) {
-                        TodayOpportunitiesSection(
-                            brief = dailyBrief,
-                            modifier = Modifier.fadeInSlideIn(delay = 500)
-                        )
-                    }
+                    TodayOpportunitiesSection(
+                        brief = dailyBrief,
+                        modifier = Modifier.fadeInSlideIn(delay = 500)
+                    )
                 }
 
                 item {
@@ -345,10 +362,16 @@ fun AnalystMorningBriefHero(
     aiResult: OrchestratedAiResult?,
     isLoading: Boolean,
     onRefresh: () -> Unit,
+    onSpeak: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val mood = brief?.marketMood ?: aiResult?.outlook ?: "Neutral"
     val confidence = aiResult?.confidenceScore ?: if (brief != null) 74 else 0
+    
+    val summaryText = aiResult?.executiveSummary?.takeIf { it.isNotBlank() }
+        ?: brief?.marketOverview?.takeIf { it.isNotBlank() }
+        ?: "FinX is gathering market context, watchlist movement, news, analyst sentiment, and technical signals for your morning read."
+
     val evidence = buildList {
         brief?.topWinners?.firstOrNull()?.let { add("${it.symbol} ${formatSignedPercent(it.percentChange)}") }
         brief?.sectorRotation?.takeIf { it.isNotBlank() }?.let { add(it) }
@@ -398,15 +421,16 @@ fun AnalystMorningBriefHero(
                 IconButton(onClick = onRefresh) {
                     Icon(Icons.Rounded.Refresh, contentDescription = "Refresh brief", tint = PrimaryIndigo)
                 }
+                IconButton(onClick = { onSpeak(summaryText) }) {
+                    Icon(Icons.AutoMirrored.Rounded.VolumeUp, contentDescription = "Listen to brief", tint = PrimaryIndigo)
+                }
             }
 
             if (isLoading && brief == null && aiResult == null) {
                 AnalystBriefSkeleton()
             } else {
                 Text(
-                    text = aiResult?.executiveSummary?.takeIf { it.isNotBlank() }
-                        ?: brief?.marketOverview?.takeIf { it.isNotBlank() }
-                        ?: "FinX is gathering market context, watchlist movement, news, analyst sentiment, and technical signals for your morning read.",
+                    text = summaryText,
                     style = MaterialTheme.typography.bodyMedium,
                     color = TextPrimary,
                     lineHeight = 22.sp,
