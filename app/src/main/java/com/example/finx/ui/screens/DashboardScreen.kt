@@ -136,7 +136,8 @@ fun DashboardScreen(
                             brief = dailyBrief,
                             aiResult = watchlistAiResult,
                             isLoading = isLoadingBrief || isAnalyzingWatchlist,
-                            onRefresh = { refreshDashboard(); fetchWatchlist() }
+                            onRefresh = { refreshDashboard(); fetchWatchlist() },
+                            modifier = Modifier.fadeInSlideIn(delay = 100)
                         )
                     }
                 }
@@ -152,12 +153,17 @@ fun DashboardScreen(
                             coroutineScope.launch { userMemoryStore.recordSymbolView(result.symbol) }
                             fetchWatchlist()
                         },
-                        label = "Search company or ticker"
+                        label = "Search company or ticker",
+                        modifier = Modifier.fadeInSlideIn(delay = 200)
                     )
                 }
 
                 item {
-                    MarketInsightsSection(insights = dashboardInsights, isLoading = isLoadingInsights)
+                    MarketInsightsSection(
+                        insights = dashboardInsights, 
+                        isLoading = isLoadingInsights,
+                        modifier = Modifier.fadeInSlideIn(delay = 300)
+                    )
                 }
 
                 item {
@@ -166,19 +172,26 @@ fun DashboardScreen(
                             brief = dailyBrief,
                             aiResult = watchlistAiResult,
                             isLoading = isAnalyzingWatchlist,
-                            onRefresh = { fetchWatchlist() }
+                            onRefresh = { fetchWatchlist() },
+                            modifier = Modifier.fadeInSlideIn(delay = 400)
                         )
                     }
                 }
 
                 item {
                     if (userProfile.enablePersonalizedRecs) {
-                        TodayOpportunitiesSection(brief = dailyBrief)
+                        TodayOpportunitiesSection(
+                            brief = dailyBrief,
+                            modifier = Modifier.fadeInSlideIn(delay = 500)
+                        )
                     }
                 }
 
                 item {
-                    WatchlistHeader(onRefresh = { fetchWatchlist() })
+                    WatchlistHeader(
+                        onRefresh = { fetchWatchlist() },
+                        modifier = Modifier.fadeInSlideIn(delay = 600)
+                    )
                 }
 
                 if (isLoadingWatchlist && watchlistQuotes.isEmpty()) {
@@ -191,7 +204,11 @@ fun DashboardScreen(
                     items(watchlistSymbols.toList()) { sym ->
                         val quote = watchlistQuotes[sym]
                         if (quote != null) {
-                            Surface(onClick = { onNavigateToStock(sym) }, color = Color.Transparent) {
+                            Surface(
+                                onClick = { onNavigateToStock(sym) }, 
+                                color = Color.Transparent,
+                                modifier = Modifier.fadeInSlideIn(delay = 700)
+                            ) {
                                 WatchlistCardPremium(symbol = sym, quote = quote)
                             }
                         }
@@ -327,7 +344,8 @@ fun AnalystMorningBriefHero(
     brief: DailyBrief?,
     aiResult: OrchestratedAiResult?,
     isLoading: Boolean,
-    onRefresh: () -> Unit
+    onRefresh: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val mood = brief?.marketMood ?: aiResult?.outlook ?: "Neutral"
     val confidence = aiResult?.confidenceScore ?: if (brief != null) 74 else 0
@@ -348,7 +366,7 @@ fun AnalystMorningBriefHero(
         .take(3)
 
     Surface(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .smoothPress(0.99f)
             .animateContentSize(
@@ -524,7 +542,7 @@ fun formatSignedPercent(value: Double): String =
     "${if (value >= 0) "+" else ""}${String.format(Locale.getDefault(), "%.1f", value)}%"
 
 @Composable
-fun MarketInsightsSection(insights: List<DashboardInsight>, isLoading: Boolean) {
+fun MarketInsightsSection(insights: List<DashboardInsight>, isLoading: Boolean, modifier: Modifier = Modifier) {
     var rotationIndex by remember { mutableIntStateOf(0) }
     
     LaunchedEffect(insights) {
@@ -546,7 +564,7 @@ fun MarketInsightsSection(insights: List<DashboardInsight>, isLoading: Boolean) 
     }
 
     Row(
-        modifier = Modifier.fillMaxWidth().height(180.dp),
+        modifier = modifier.fillMaxWidth().height(180.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         repeat(2) { index ->
@@ -680,7 +698,8 @@ fun OrchestratedDailyBriefCard(
     brief: DailyBrief?,
     aiResult: OrchestratedAiResult?,
     isLoading: Boolean,
-    onRefresh: () -> Unit
+    onRefresh: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     var isExpanded by remember { mutableStateOf(true) }
     val infiniteTransition = rememberInfiniteTransition(label = "Glow")
@@ -690,7 +709,7 @@ fun OrchestratedDailyBriefCard(
     )
 
     Card(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .smoothPress(0.985f)
             .animateContentSize(
@@ -770,8 +789,8 @@ fun OrchestratedDailyBriefCard(
 }
 
 @Composable
-fun TodayOpportunitiesSection(brief: DailyBrief? = null) {
-    Column {
+fun TodayOpportunitiesSection(brief: DailyBrief? = null, modifier: Modifier = Modifier) {
+    Column(modifier = modifier) {
         Text("Today's Opportunities", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         Spacer(modifier = Modifier.height(16.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -817,9 +836,9 @@ fun OpportunityCard(modifier: Modifier, sector: String, trend: String, icon: Ima
 }
 
 @Composable
-fun WatchlistHeader(onRefresh: () -> Unit) {
+fun WatchlistHeader(onRefresh: () -> Unit, modifier: Modifier = Modifier) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
